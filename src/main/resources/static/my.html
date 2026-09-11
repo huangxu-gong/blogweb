@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的文章 - 个人博客</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="with-sidebar" data-active="my">
+
+<div class="page">
+  <a href="/index.html" class="link" style="margin-bottom:14px">← 返回首页</a>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+    <h2 style="margin:0">我的文章</h2>
+    <a href="/write.html" class="btn" style="width:auto;padding:9px 20px;font-size:13px">+ 写新文章</a>
+  </div>
+
+  <div class="tabs-nav">
+    <div class="tab-item active" onclick="switchTab(this, 'all')">全部</div>
+    <div class="tab-item" onclick="switchTab(this, 'published')">已发布</div>
+    <div class="tab-item" onclick="switchTab(this, 'draft')">草稿</div>
+  </div>
+
+  <div id="list"></div>
+  <div class="pager" id="pager"></div>
+</div>
+
+<script src="/js/common.js"></script>
+<script>
+if (!App.store.isLogin) { alert('请先登录'); location.href = '/login.html'; }
+
+const state = { pageNum: 1, pageSize: 10, total: 0, filter: 'all' };
+
+async function load() {
+  try {
+    const res = await App.api.myArticles({ pageNum: state.pageNum, pageSize: state.pageSize });
+    const data = res.data || {};
+    let list = data.records || data.list || [];
+    state.total = data.total || list.length;
+    if (state.filter === 'published') list = list.filter(a => a.status === 1);
+    if (state.filter === 'draft')      list = list.filter(a => a.status === 0);
+
+    const box = document.getElementById('list');
+    if (!list.length) {
+      box.innerHTML = `<div class="empty-state"><div class="empty-icon">📝</div>还没有文章<br><a href="/write.html" style="color:var(--cyan)">去写第一篇 →</a></div>`;
+      document.getElementById('pager').style.display = 'none';
+      return;
+    }
+    box.innerHTML = list.map(a => {
+      const img = extractImg(a.content);
+      return `
+        <div class="article-card" onclick="viewDetail(${a.id})">
+          ${img ? `<div class="card-thumb"><img src="${img}" alt=""></div>` : ''}
+          <h3>${App.escapeHtml(a.title)}
+            <span class="status-chip ${a.status === 0 ? 'off' : ''}">${a.status === 1 ? '已发布' : '草稿'}</span>
+          </h3>
+          <p>${App.escapeHtml(a.summary || (a.content || '').substring(0, 100))}</p>
+          <div class="meta">
+            <span>🕐 ${App.formatDate(a.createTime)}</span>
+            <span class="meta-time">👁 ${a.viewCount || 0}</span>
+          </div>
+          <div class="actions">
+            <a class="link" href="/detail.html?id=${a.id}" onclick="event.stopPropagation()">查看</a>
+            <a class="link" href="/write.html?id=${a.id}" onclick="event.stopPropagation()">编辑</a>
+            <a class="link danger" onclick="event.stopPropagation(); del(${a.id})">删除</a>
+          </div>
+        </div>`;
+    }).join('');
+    renderPager();
+  } catch (e) {}
+}
+
+function extractImg(content) {
+  const m = (content || '').match(/<img[^>]+src=["']([^"']+)["']/i);
+  return m ? m[1] : '';
+}
+function viewDetail(id) { location.href = '/detail.html?id=' + id; }
+
+function switchTab(el, key) {
+  document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  state.filter = key;
+  state.pageNum = 1;
+  load();
+}
+
+function renderPager() {
+  const totalPage = Math.max(1, Math.ceil(state.total / state.pageSize));
+  const pager = document.getElementById('pager');
+  if (totalPage <= 1) { pager.style.display = 'none'; return; }
+  pager.style.display = 'flex';
+  pager.innerHTML = `
+    <button class="btn" onclick="goPage(${state.pageNum - 1})" ${state.pageNum <= 1 ? 'disabled' : ''}>上一页</button>
+    <span>第 ${state.pageNum} / ${totalPage} 页</span>
+    <button class="btn" onclick="goPage(${state.pageNum + 1})" ${state.pageNum >= totalPage ? 'disabled' : ''}>下一页</button>`;
+}
+function goPage(n) { state.pageNum = n; load(); }
+
+async function del(id) {
+  if (!confirm('确定删除？')) return;
+  try {
+    await App.api.deleteArt(id);
+    load();
+  } catch (e) {}
+}
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,231 @@
+﻿﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>写文章 - 个人博客</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="with-sidebar" data-active="write">
+
+<div class="write-box">
+  <a href="javascript:history.back()" class="link" style="margin-bottom:14px">← 返回</a>
+  <h2 id="formTitle">发布新文章</h2>
+  <div id="errorMsg" class="error"></div>
+
+  <div class="form-item">
+    <label for="title">标题</label>
+    <input id="title" type="text" placeholder="给文章起个好标题">
+  </div>
+
+  <div class="form-item">
+    <label for="summary">摘要</label>
+    <input id="summary" type="text" placeholder="可选，留空将自动从正文截取">
+  </div>
+
+  <div class="editor-toolbar">
+    <button type="button" class="tool-btn" onclick="pickFile()">📷 上传图片</button>
+    <button type="button" class="tool-btn" onclick="pickFileMulti()">📁 批量上传</button>
+    <span class="upload-hint" id="uploadHint"></span>
+    <input type="file" id="fileInput" accept="image/*" style="display:none">
+    <input type="file" id="fileInputMulti" accept="image/*" multiple style="display:none">
+  </div>
+
+  <!-- 图片画廊（缩略图网格，点击放大） -->
+  <div class="gallery-wrap" id="galleryWrap" style="display:none">
+    <div class="gallery-head">
+      <span>图片 <span id="galleryCount" class="gallery-count">0</span></span>
+      <button type="button" class="gallery-clear" onclick="clearGallery()">清空</button>
+    </div>
+    <div class="gallery-grid" id="galleryGrid"></div>
+  </div>
+
+  <div class="form-item" style="margin-bottom:0">
+    <textarea id="content" placeholder="开始写作吧... 上传的图片会显示在上方画廊区域，点击画廊图片可预览大图"></textarea>
+  </div>
+
+  <div class="actions">
+    <button class="btn" onclick="submit(1)" id="submitBtn">发布</button>
+    <button class="btn btn-outline" onclick="submit(0)">存草稿</button>
+    <span class="tip" style="margin:0">上传的图片独立管理，不会出现在正文里</span>
+  </div>
+</div>
+
+<!-- 全屏图片预览 Lightbox -->
+<div class="lightbox" id="lightbox" style="display:none" onclick="closeLightbox(event)">
+  <button class="lightbox-close" onclick="closeLightbox()">×</button>
+  <button class="lightbox-nav lightbox-prev" onclick="event.stopPropagation();lightboxPrev()">‹</button>
+  <img id="lightboxImg" src="" alt="">
+  <button class="lightbox-nav lightbox-next" onclick="event.stopPropagation();lightboxNext()">›</button>
+  <div class="lightbox-counter" id="lightboxCounter"></div>
+</div>
+
+<script src="/js/common.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const editId = params.get('id');
+
+if (!App.store.isLogin) {
+  alert('请先登录');
+  location.href = '/login.html';
+}
+
+const GALLERY_MARKER_RE = /<!-- GAL:(\[.*?\]) -->/;
+
+let form = { id: null, title: '', content: '', summary: '', status: 1 };
+let gallery = [];       // [{url, localUrl?}]
+let galleryIdx = 0;     // 当前显示索引
+
+// ---------- 初始化 ----------
+async function init() {
+  if (editId) {
+    document.getElementById('formTitle').textContent = '编辑文章';
+    const res = await App.api.articleDetail(editId);
+    const a = res.data;
+    if (!a) { alert('文章不存在'); location.href = '/my.html'; return; }
+    if (String(a.userId) !== String(App.store.userId)) { alert('无权编辑'); history.back(); return; }
+    form = { id: a.id, title: a.title, content: a.content, summary: a.summary || '', status: a.status };
+    if (a.status === 0) document.getElementById('formTitle').textContent = '编辑草稿';
+    document.getElementById('title').value = a.title || '';
+    document.getElementById('summary').value = a.summary || '';
+        document.getElementById('submitBtn').textContent = '保存修改';
+    // 从 content 里提取画廊
+    const m = GALLERY_MARKER_RE.exec(a.content || '');
+    if (m) {
+      try { gallery = JSON.parse(m[1]); } catch(e) { gallery = []; }
+      // 从 textarea 内容里去掉画廊标记
+      document.getElementById('content').value = (a.content || '').replace(GALLERY_MARKER_RE, '').trim();
+    } else {
+      document.getElementById('content').value = a.content || '';
+    }
+  }
+  renderGallery();
+}
+init();
+
+// ---------- 图片上传 ----------
+function pickFile() { document.getElementById('fileInput').click(); }
+document.getElementById('fileInput').addEventListener('change', async function () {
+  const file = this.files[0]; if (!file) return;
+  await uploadAndAdd(file);
+  this.value = '';
+});
+
+function pickFileMulti() { document.getElementById('fileInputMulti').click(); }
+document.getElementById('fileInputMulti').addEventListener('change', async function () {
+  const files = Array.from(this.files || []);
+  for (const f of files) await uploadAndAdd(f);
+  this.value = '';
+});
+
+// 粘贴图片 → 加入画廊
+document.getElementById('content').addEventListener('paste', function (e) {
+  if (!e.clipboardData) return;
+  const files = Array.from(e.clipboardData.files || []);
+  const imgFiles = files.filter(f => f.type.startsWith('image/'));
+  if (!imgFiles.length) return;
+  e.preventDefault();
+  imgFiles.forEach(f => uploadAndAdd(f));
+});
+
+async function uploadAndAdd(file) {
+  const hint = document.getElementById('uploadHint');
+  hint.textContent = '上传中...'; hint.className = 'upload-hint uploading';
+  try {
+    const res = await App.api.upload(file);
+    if (res.code !== 200) throw res;
+    hint.textContent = '✓ 已添加'; hint.className = 'upload-hint ok';
+    gallery.push(res.data);
+    galleryIdx = gallery.length - 1;
+    renderGallery();
+  } catch (e) {
+    hint.textContent = '上传失败'; hint.className = 'upload-hint err';
+  }
+  setTimeout(() => { hint.textContent = ''; hint.className = 'upload-hint'; }, 2000);
+}
+
+// ---------- 画廊渲染（缩略图网格） ----------
+function renderGallery() {
+  const wrap = document.getElementById('galleryWrap');
+  if (!gallery.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  document.getElementById('galleryCount').textContent = gallery.length;
+
+  document.getElementById('galleryGrid').innerHTML = gallery.map((url, i) => `
+    <div class="gallery-thumb" onclick="openLightbox(${i})">
+      <img src="${url}" alt="">
+      <button type="button" class="gallery-thumb-del" title="删除" onclick="event.stopPropagation();delGalleryItem(${i})">×</button>
+    </div>
+  `).join('');
+}
+
+function delGalleryItem(i) {
+  if (!confirm('删除这张图片？')) return;
+  gallery.splice(i, 1);
+  renderGallery();
+}
+function clearGallery() {
+  if (!confirm('清空所有图片？')) return;
+  gallery = []; renderGallery();
+}
+
+// ---------- Lightbox 全屏预览 ----------
+function openLightbox(idx) {
+  galleryIdx = idx;
+  const lb = document.getElementById('lightbox');
+  lb.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  document.getElementById('lightboxImg').src = gallery[galleryIdx];
+  document.getElementById('lightboxCounter').textContent = `${galleryIdx + 1} / ${gallery.length}`;
+}
+function closeLightbox(e) {
+  if (e && e.target.id !== 'lightbox') return;
+  document.getElementById('lightbox').style.display = 'none';
+  document.body.style.overflow = '';
+}
+function lightboxPrev() { if (gallery.length < 2) return; galleryIdx = (galleryIdx - 1 + gallery.length) % gallery.length; openLightbox(galleryIdx); }
+function lightboxNext() { if (gallery.length < 2) return; galleryIdx = (galleryIdx + 1) % gallery.length; openLightbox(galleryIdx); }
+
+// 键盘支持
+document.addEventListener('keydown', function (e) {
+  if (document.getElementById('lightbox').style.display === 'flex') {
+    if (e.key === 'ArrowLeft') lightboxPrev();
+    else if (e.key === 'ArrowRight') lightboxNext();
+    else if (e.key === 'Escape') closeLightbox();
+  }
+});
+
+// ---------- 提交（status: 1=发布 0=存草稿） ----------
+async function submit(saveStatus = 1) {
+  const title = document.getElementById('title').value.trim();
+  let content = document.getElementById('content').value.trim();
+  const summary = document.getElementById('summary').value.trim();
+  const status = saveStatus === 0 ? 0 : 1;
+  const errEl = document.getElementById('errorMsg');
+  errEl.textContent = '';
+
+  if (!title) { errEl.textContent = '标题不能为空'; return; }
+  // 允许正文为空（只有图片画廊也可以）
+  if (!content && !gallery.length) { errEl.textContent = '正文和图片不能都为空'; return; }
+
+  // 在 content 末尾注入画廊标记
+  if (gallery.length) {
+    const marker = `<!-- GAL:${JSON.stringify(gallery)} -->`;
+    content = content + '\n\n' + marker;
+  }
+
+  const body = { title, content, summary: summary || content.substring(0, 100), status };
+  try {
+    if (form.id) {
+      body.id = form.id;
+      await App.api.update(body);
+    } else {
+      await App.api.publish(body);
+    }
+    alert(status === 1 ? (form.id ? '保存成功' : '发布成功') : '已存入草稿');
+    location.href = '/my.html';
+  } catch (e) {}
+}
+</script>
+</body>
+</html>

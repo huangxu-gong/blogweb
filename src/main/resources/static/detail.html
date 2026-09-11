@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>文章详情 - 个人博客</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="with-sidebar" data-active="home">
+
+<article class="article-detail" id="detailBox">
+  <div class="empty">加载中...</div>
+</article>
+
+<div class="comment-card" id="commentBox" style="display:none">
+  <h3 class="comment-title">评论<span class="comment-count" id="commentCount">0</span></h3>
+  <div id="commentList"></div>
+
+  <!-- 登录态：评论输入框 -->
+  <div class="comment-form" id="commentForm" style="display:none">
+    <div class="comment-toolbar">
+      <button class="tool-btn" type="button" onclick="addImgToComment()">📷 插入图片</button>
+      <span class="upload-hint" id="uploadHint"></span>
+    </div>
+    <textarea id="commentContent" placeholder="写下你的评论..."></textarea>
+    <div class="comment-form-row">
+      <span class="tip" style="margin:0">支持直接粘贴图片、输入网址自动识别为链接</span>
+      <button class="btn" onclick="submitComment()">发表评论</button>
+    </div>
+    <input type="file" id="commentImgInput" accept="image/*" style="display:none">
+  </div>
+
+  <!-- 未登录提示 -->
+  <div class="comment-login" id="commentLogin" style="display:none">
+    登录后才能评论 — <a href="/login.html">去登录</a>
+  </div>
+</div>
+
+<!-- Lightbox（画廊用） -->
+<div class="lightbox" id="lightbox" style="display:none" onclick="closeLightbox(event)">
+  <button class="lightbox-close" onclick="closeLightbox()">×</button>
+  <button class="lightbox-nav lightbox-prev" onclick="event.stopPropagation();lightboxPrev()">‹</button>
+  <img id="lightboxImg" src="" alt="">
+  <button class="lightbox-nav lightbox-next" onclick="event.stopPropagation();lightboxNext()">›</button>
+  <div class="lightbox-counter" id="lightboxCounter"></div>
+</div>
+
+<script src="/js/common.js"></script>
+<script>
+const GALLERY_MARKER_RE = /<!-- GAL:(\[.*?\]) -->/;
+let detailGallery = [];
+let detailGalleryIdx = 0;
+
+const params = new URLSearchParams(location.search);
+const articleId = params.get('id');
+const detailBox = document.getElementById('detailBox');
+
+if (!articleId) {
+  detailBox.innerHTML = `<div class="empty">未指定文章 <a href="/index.html" style="color:var(--cyan)">← 返回首页</a></div>`;
+} else {
+  loadDetail();
+  loadComments();
+  document.getElementById('commentForm').style.display = App.store.isLogin ? 'block' : 'none';
+  document.getElementById('commentLogin').style.display = App.store.isLogin ? 'none' : 'block';
+}
+
+async function loadDetail() {
+  try {
+    const res = await App.api.articleDetail(articleId);
+    const a = res.data;
+    if (!a) { detailBox.innerHTML = `<div class="empty">文章不存在</div>`; return; }
+
+    // 从 content 提取画廊
+    let cleanContent = a.content || '';
+    const m = GALLERY_MARKER_RE.exec(cleanContent);
+    if (m) {
+      try { detailGallery = JSON.parse(m[1]); } catch(e) { detailGallery = []; }
+      cleanContent = cleanContent.replace(GALLERY_MARKER_RE, '').trim();
+    }
+
+    const canEdit = App.store.isLogin && String(App.store.userId) === String(a.userId);
+    detailBox.innerHTML = `
+      <a href="/index.html" class="link" style="margin-bottom:14px">← 返回列表</a>
+      <h1>${App.escapeHtml(a.title)}</h1>
+      <div class="meta">
+        <span>作者：${App.escapeHtml(a.authorName || '')}</span>
+        <span class="meta-time">${App.formatDate(a.createTime)}</span>
+        <span class="meta-time">👁 ${a.viewCount || 0}</span>
+        ${canEdit ? `
+          <span class="meta-time" style="margin-left:auto">
+            <a class="link" href="/write.html?id=${a.id}">✏️ 编辑</a>
+            <a class="link danger" onclick="delArticle(${a.id})">🗑 删除</a>
+          </span>` : ''}
+      </div>
+      <div class="article-content">${renderContent(cleanContent)}</div>
+      ${detailGallery.length ? renderDetailGallery() : ''}`;
+  } catch (e) {
+    detailBox.innerHTML = `<div class="empty">加载失败：${e.msg || e.message || ''}</div>`;
+  }
+}
+
+function renderDetailGallery() {
+  return `
+    <div class="gallery-wrap" style="margin-top:20px">
+      <div class="gallery-head"><span>图片 <span class="gallery-count">${detailGallery.length}</span></span></div>
+      <div class="gallery-grid">
+        ${detailGallery.map((url, i) => `
+          <div class="gallery-thumb" onclick="openLightbox(${i})">
+            <img src="${url}" alt="">
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
+function openLightbox(idx) {
+  detailGalleryIdx = idx;
+  const lb = document.getElementById('lightbox');
+  lb.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  document.getElementById('lightboxImg').src = detailGallery[detailGalleryIdx];
+  document.getElementById('lightboxCounter').textContent = `${detailGalleryIdx + 1} / ${detailGallery.length}`;
+}
+function closeLightbox(e) {
+  if (e && e.target.id !== 'lightbox') return;
+  document.getElementById('lightbox').style.display = 'none';
+  document.body.style.overflow = '';
+}
+function lightboxPrev() { if (detailGallery.length < 2) return; detailGalleryIdx = (detailGalleryIdx - 1 + detailGallery.length) % detailGallery.length; openLightbox(detailGalleryIdx); }
+function lightboxNext() { if (detailGallery.length < 2) return; detailGalleryIdx = (detailGalleryIdx + 1) % detailGallery.length; openLightbox(detailGalleryIdx); }
+document.addEventListener('keydown', function (e) {
+  if (document.getElementById('lightbox').style.display === 'flex') {
+    if (e.key === 'ArrowLeft') lightboxPrev();
+    else if (e.key === 'ArrowRight') lightboxNext();
+    else if (e.key === 'Escape') closeLightbox();
+  }
+});
+
+function renderContent(text) {
+  let html = App.escapeHtml(text);
+  // 1. Markdown 图片 ![alt](url) → <img>
+  html = html.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m, alt, url) => {
+    return `<img class="article-img" src="${url}" alt="${alt}">`;
+  });
+  // 2. Markdown 链接 [text](url) → <a>
+  html = html.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m, txt, url) => {
+    return `<a href="${url}" target="_blank" rel="noopener">${txt}</a>`;
+  });
+  // 3. 裸 URL 自动识别（图片 → img，其他 → a）
+  html = html.replace(/(^|[^\w"'\[])(https?:\/\/[^\s<>"']+)/g, (match, before, url) => {
+    if (/\.(png|jpe?g|gif|webp|bmp)(\?.*)?$/i.test(url)) {
+      return before + `<a class="comment-img-link" href="${url}" target="_blank"><img class="article-img" src="${url}" alt="图片"></a>`;
+    }
+    return before + `<a href="${url}" target="_blank" rel="noopener">${url}</a>`;
+  });
+  // 4. 换行
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
+async function delArticle(id) {
+  if (!confirm('确定删除这篇文章？')) return;
+  try {
+    await App.api.deleteArt(id);
+    alert('删除成功');
+    location.href = '/my.html';
+  } catch (e) {}
+}
+
+// ---------- 评论 ----------
+async function loadComments() {
+  try {
+    const res = await App.api.commentList(App.store.userId);
+    const list = res.data || [];
+    // 后端 commentList 接收的是 userId 参数，返回该用户的评论；
+    // 但这里我们需要的是当前文章的评论，后端可能还没按 articleId 过滤。
+    // 为健壮起见，先按 articleId 前端过滤（若后端已过滤也没问题）
+    const filtered = list.filter(c => String(c.articleId) === String(articleId));
+    document.getElementById('commentCount').textContent = filtered.length;
+    document.getElementById('commentList').innerHTML = filtered.length
+      ? filtered.map(c => renderComment(c)).join('')
+      : `<div class="empty" style="padding:30px 0">暂无评论，抢沙发！</div>`;
+    document.getElementById('commentBox').style.display = 'block';
+  } catch (e) {}
+}
+
+function renderComment(c) {
+  const canDel = App.store.isLogin && String(App.store.userId) === String(c.userId);
+  return `
+    <div class="comment-item">
+      <div class="comment-item-head">
+        <div class="comment-nick">${App.escapeHtml(c.nickname || '匿名用户')}</div>
+        <div class="comment-time">${App.formatDate(c.createTime)}</div>
+        ${canDel ? `<button class="link danger" onclick="delComment(${c.id})" style="font-size:12px">删除</button>` : ''}
+      </div>
+      <div class="comment-text">${renderContent(c.content || '')}</div>
+    </div>`;
+}
+
+async function submitComment() {
+  const content = document.getElementById('commentContent').value.trim();
+  if (!content) { alert('评论内容不能为空'); return; }
+  try {
+    await App.api.commentAdd({ articleId, content });
+    document.getElementById('commentContent').value = '';
+    loadComments();
+  } catch (e) {}
+}
+
+async function delComment(id) {
+  if (!confirm('删除这条评论？')) return;
+  try {
+    await App.api.commentDel(id);
+    loadComments();
+  } catch (e) {}
+}
+
+// 评论图片上传
+function addImgToComment() { document.getElementById('commentImgInput').click(); }
+document.getElementById('commentImgInput').addEventListener('change', async function () {
+  const file = this.files[0];
+  if (!file) return;
+  const hint = document.getElementById('uploadHint');
+  hint.textContent = '上传中...';
+  try {
+    const res = await App.api.upload(file);
+    if (res.code !== 200) throw res;
+    hint.textContent = '✓ 已插入'; hint.className = 'upload-hint ok';
+    const url = res.data;
+    const ta = document.getElementById('commentContent');
+    ta.value += (ta.value ? '\n' : '') + url + '\n';
+  } catch (e) {
+    hint.textContent = '上传失败'; hint.className = 'upload-hint err';
+  }
+  setTimeout(() => { hint.textContent = ''; hint.className = 'upload-hint'; }, 2500);
+  this.value = '';
+});
+
+// 点击图片放大
+document.addEventListener('click', function (e) {
+  const img = e.target.closest('.article-img');
+  if (!img) return;
+  const v = document.createElement('div');
+  v.className = 'img-viewer open';
+  v.innerHTML = `<div class="img-viewer-close" onclick="this.parentElement.remove()">×</div><img src="${img.src}">`;
+  v.addEventListener('click', () => v.remove());
+  document.body.appendChild(v);
+});
+</script>
+</body>
+</html>

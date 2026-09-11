@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理后台 - 个人博客</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="with-sidebar" data-active="admin">
+
+<div class="admin-body">
+  <h2>🛠️ 管理后台</h2>
+
+  <div class="admin-tabs">
+    <button class="admin-tab active" onclick="switchTab(this, 'users')">用户管理</button>
+    <button class="admin-tab" onclick="switchTab(this, 'articles')">文章管理</button>
+    <button class="admin-tab" onclick="switchTab(this, 'comments')">评论管理</button>
+    <button class="admin-tab" onclick="switchTab(this, 'banners')">轮播管理</button>
+  </div>
+
+  <!-- 用户管理 -->
+  <div id="panel-users">
+    <div id="userList"></div>
+  </div>
+
+  <!-- 文章管理 -->
+  <div id="panel-articles" style="display:none">
+    <div class="admin-toolbar">
+      <div class="art-search" style="flex:1;max-width:360px">
+        <input type="text" id="articleKw" placeholder="搜索标题..." onkeydown="if(event.key==='Enter'){state.articlePage=1;loadArticles()}">
+        <button class="tool-btn" onclick="state.articlePage=1;loadArticles()">搜索</button>
+      </div>
+    </div>
+    <div id="articleList"></div>
+    <div class="pager" id="articlePager"></div>
+  </div>
+
+  <!-- 评论管理 -->
+  <div id="panel-comments" style="display:none">
+    <div class="admin-toolbar">
+      <div class="art-search" style="flex:1;max-width:360px">
+        <input type="text" id="commentKw" placeholder="搜索评论内容..." onkeydown="if(event.key==='Enter'){state.commentPage=1;loadComments()}">
+        <button class="tool-btn" onclick="state.commentPage=1;loadComments()">搜索</button>
+      </div>
+    </div>
+    <div id="commentList"></div>
+    <div class="pager" id="commentPager"></div>
+  </div>
+
+  <!-- 轮播管理 -->
+  <div id="panel-banners" style="display:none">
+    <div class="admin-toolbar">
+      <button class="tool-btn" onclick="openBannerModal()">+ 新增轮播</button>
+    </div>
+    <div id="bannerList"></div>
+  </div>
+</div>
+
+<!-- 轮播弹窗 -->
+<div class="admin-modal-mask" id="bannerModal">
+  <div class="admin-modal">
+    <h3 id="bannerModalTitle">新增轮播</h3>
+    <div class="form-item"><label>标题</label><input id="bTitle" type="text"></div>
+    <div class="form-item"><label>图片 URL</label>
+      <input id="bImg" type="text" placeholder="或点击上传" oninput="previewBannerImg()">
+      <input type="file" id="bFileInput" accept="image/*" style="display:none">
+      <button type="button" class="tool-btn" onclick="document.getElementById('bFileInput').click()" style="margin-top:6px">📷 上传图片</button>
+      <div class="banner-preview" id="bPreview"></div>
+    </div>
+    <div class="form-item"><label>关联文章 ID（可选）</label><input id="bArticleId" type="number"></div>
+    <div class="form-item"><label>排序</label><input id="bSort" type="number" value="1"></div>
+    <div class="form-item"><label>状态</label>
+      <select id="bStatus"><option value="1">启用</option><option value="0">禁用</option></select>
+    </div>
+    <div class="admin-modal-actions">
+      <button class="tool-btn" onclick="closeBannerModal()">取消</button>
+      <button class="btn" onclick="saveBanner()" style="padding:8px 22px;font-size:13px">保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/common.js"></script>
+<script>
+if (!App.store.isLogin) { alert('请先登录'); location.href = '/login.html'; }
+if (!App.store.isAdmin) { alert('仅管理员可访问'); history.back(); }
+
+const state = { articlePage: 1, articleSize: 10, commentPage: 1, commentSize: 10 };
+let editingBannerId = null;
+
+function switchTab(el, key) {
+  document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['users', 'articles', 'comments', 'banners'].forEach(k => {
+    document.getElementById('panel-' + k).style.display = (k === key) ? '' : 'none';
+  });
+  if (key === 'users')    loadUsers();
+  if (key === 'articles') loadArticles();
+  if (key === 'comments') loadComments();
+  if (key === 'banners')  loadBanners();
+}
+
+// ============== 用户 ==============
+async function loadUsers() {
+  try {
+    const res = await App.api.adminUsers();
+    const list = res.data || [];
+    const box = document.getElementById('userList');
+    box.innerHTML = `
+      <table class="admin-table">
+        <thead><tr><th>ID</th><th>用户名</th><th>昵称</th><th>角色</th><th>状态</th><th>注册时间</th><th>操作</th></tr></thead>
+        <tbody>
+          ${list.map(u => `
+            <tr>
+              <td>${u.id}</td>
+              <td>${App.escapeHtml(u.username)}</td>
+              <td>${App.escapeHtml(u.nickname || '-')}</td>
+              <td>${u.role === 1 ? '<span class="admin-chip ok">管理员</span>' : '普通用户'}</td>
+              <td>${u.status === 1 ? '<span class="admin-chip ok">正常</span>' : '<span class="admin-chip warn">禁用</span>'}</td>
+              <td>${App.formatDate(u.createTime)}</td>
+              <td>
+                <button class="link" onclick="toggleUserStatus(${u.id}, ${u.status})">
+                  ${u.status === 1 ? '禁用' : '启用'}
+                </button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch (e) {}
+}
+
+async function toggleUserStatus(id, curStatus) {
+  const nextStatus = curStatus === 1 ? 0 : 1;
+  try {
+    await App.api.adminUserStatus({ userId: id, status: nextStatus });
+    loadUsers();
+  } catch (e) {}
+}
+
+// ============== 文章 ==============
+async function loadArticles() {
+  const kw = document.getElementById('articleKw').value.trim();
+  try {
+    const res = await App.api.adminArticles({ pageNum: state.articlePage, pageSize: state.articleSize, keyword: kw });
+    const data = res.data || {};
+    const list = data.records || data.list || [];
+    const total = data.total || 0;
+    const totalPage = Math.max(1, Math.ceil(total / state.articleSize));
+    document.getElementById('articleList').innerHTML = `
+      <table class="admin-table">
+        <thead><tr><th>ID</th><th>标题</th><th>作者</th><th>浏览</th><th>状态</th><th>发布时间</th><th>操作</th></tr></thead>
+        <tbody>
+          ${list.map(a => `
+            <tr>
+              <td>${a.id}</td>
+              <td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(a.title)}</td>
+              <td>${App.escapeHtml(a.authorName || '')}</td>
+              <td>${a.viewCount || 0}</td>
+              <td>${a.status === 1 ? '<span class="admin-chip ok">发布</span>' : '<span class="admin-chip warn">草稿</span>'}</td>
+              <td>${App.formatDate(a.createTime)}</td>
+              <td>
+                <button class="link" onclick="location.href='/detail.html?id=${a.id}'">查看</button>
+                <button class="link" onclick="toggleArticleStatus(${a.id}, ${a.status})">${a.status === 1 ? '隐藏' : '发布'}</button>
+                <button class="link danger" onclick="delArticleAdmin(${a.id})">删除</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+    document.getElementById('articlePager').innerHTML = totalPage > 1 ? `
+      <button class="btn" onclick="state.articlePage--;loadArticles()" ${state.articlePage <= 1 ? 'disabled' : ''}>上一页</button>
+      <span>第 ${state.articlePage} / ${totalPage} 页</span>
+      <button class="btn" onclick="state.articlePage++;loadArticles()" ${state.articlePage >= totalPage ? 'disabled' : ''}>下一页</button>` : '';
+  } catch (e) {}
+}
+
+async function toggleArticleStatus(id, cur) {
+  try { await App.api.adminArticleStatus({ id, status: cur === 1 ? 0 : 1 }); loadArticles(); } catch (e) {}
+}
+async function delArticleAdmin(id) {
+  if (!confirm('确认删除文章？')) return;
+  try { await App.api.adminArticleDel(id); loadArticles(); } catch (e) {}
+}
+
+// ============== 评论 ==============
+async function loadComments() {
+  const kw = document.getElementById('commentKw').value.trim();
+  try {
+    const res = await App.api.adminComments({ pageNum: state.commentPage, pageSize: state.commentSize, keyword: kw });
+    const data = res.data || {};
+    const list = data.records || data.list || [];
+    const total = data.total || 0;
+    const totalPage = Math.max(1, Math.ceil(total / state.commentSize));
+    document.getElementById('commentList').innerHTML = `
+      <table class="admin-table">
+        <thead><tr><th>ID</th><th>用户</th><th>内容</th><th>文章 ID</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
+        <tbody>
+          ${list.map(c => `
+            <tr>
+              <td>${c.id}</td>
+              <td>${App.escapeHtml(c.nickname || '')}</td>
+              <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${App.escapeHtml(c.content)}</td>
+              <td>${c.articleId}</td>
+              <td>${c.status === 1 ? '<span class="admin-chip ok">显示</span>' : '<span class="admin-chip warn">隐藏</span>'}</td>
+              <td>${App.formatDate(c.createTime)}</td>
+              <td>
+                <button class="link" onclick="toggleCommentStatus(${c.id}, ${c.status})">${c.status === 1 ? '隐藏' : '显示'}</button>
+                <button class="link danger" onclick="delCommentAdmin(${c.id})">删除</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+    document.getElementById('commentPager').innerHTML = totalPage > 1 ? `
+      <button class="btn" onclick="state.commentPage--;loadComments()" ${state.commentPage <= 1 ? 'disabled' : ''}>上一页</button>
+      <span>第 ${state.commentPage} / ${totalPage} 页</span>
+      <button class="btn" onclick="state.commentPage++;loadComments()" ${state.commentPage >= totalPage ? 'disabled' : ''}>下一页</button>` : '';
+  } catch (e) {}
+}
+async function toggleCommentStatus(id, cur) {
+  try { await App.api.adminCommentStatus({ id, status: cur === 1 ? 0 : 1 }); loadComments(); } catch (e) {}
+}
+async function delCommentAdmin(id) {
+  if (!confirm('确认删除评论？')) return;
+  try { await App.api.adminCommentDel(id); loadComments(); } catch (e) {}
+}
+
+// ============== 轮播 ==============
+async function loadBanners() {
+  try {
+    const res = await App.api.bannerAll();
+    const list = res.data || [];
+    document.getElementById('bannerList').innerHTML = list.length
+      ? list.map(b => `
+          <div class="banner-row">
+            <div class="thumb">
+              <img src="${b.imageUrl}" alt="" onerror="this.style.background='linear-gradient(135deg,#eae3ff,#d4f1ef)'">
+            </div>
+            <div class="info">
+              <div class="t">${App.escapeHtml(b.title || '(无标题)')}</div>
+              <div class="m">
+                排序 ${b.sort} · ${b.articleId ? `<a href="/detail.html?id=${b.articleId}" target="_blank">关联文章 #${b.articleId}</a>` : '无关联文章'}
+                · ${b.status === 1 ? '<span class="status-chip">启用</span>' : '<span class="status-chip off">禁用</span>'}
+              </div>
+            </div>
+            <div class="actions">
+              <button class="link" onclick="openBannerModal(${b.id})">编辑</button>
+              <button class="link danger" onclick="delBanner(${b.id})">删除</button>
+            </div>
+          </div>`).join('')
+      : `<div class="empty" style="padding:40px 0">还没有轮播，点右上角新增</div>`;
+  } catch (e) {}
+}
+
+function openBannerModal(id) {
+  editingBannerId = id || null;
+  document.getElementById('bannerModalTitle').textContent = id ? '编辑轮播' : '新增轮播';
+  document.getElementById('bTitle').value = '';
+  document.getElementById('bImg').value = '';
+  document.getElementById('bArticleId').value = '';
+  document.getElementById('bSort').value = '1';
+  document.getElementById('bStatus').value = '1';
+  document.getElementById('bPreview').classList.remove('show');
+  if (id) {
+    // 读取已有信息（简易版：从轮播列表找，若找不到就留空）
+  }
+  document.getElementById('bannerModal').classList.add('open');
+}
+function closeBannerModal() { document.getElementById('bannerModal').classList.remove('open'); }
+
+function previewBannerImg() {
+  const url = document.getElementById('bImg').value.trim();
+  const p = document.getElementById('bPreview');
+  if (!url) { p.classList.remove('show'); return; }
+  p.classList.add('show');
+  p.innerHTML = `<img src="${url}" alt="" onerror="this.parentElement.classList.remove('show')">`;
+}
+
+// 弹窗内上传图片
+document.addEventListener('DOMContentLoaded', () => {
+  const f = document.getElementById('bFileInput');
+  if (f) f.addEventListener('change', async function () {
+    const file = this.files[0]; if (!file) return;
+    const res = await App.api.upload(file);
+    if (res.code === 200) {
+      document.getElementById('bImg').value = res.data;
+      previewBannerImg();
+    } else {
+      alert(res.msg || '上传失败');
+    }
+    this.value = '';
+  });
+});
+
+async function saveBanner() {
+  const title     = document.getElementById('bTitle').value.trim();
+  const imageUrl  = document.getElementById('bImg').value.trim();
+  const articleId = document.getElementById('bArticleId').value.trim();
+  const sort      = parseInt(document.getElementById('bSort').value || '0', 10);
+  const status    = parseInt(document.getElementById('bStatus').value, 10);
+  if (!imageUrl) { alert('请填写图片 URL 或上传图片'); return; }
+  try {
+    await App.api.bannerAdd({
+      id: editingBannerId ? editingBannerId : undefined,
+      title, imageUrl,
+      articleId: articleId ? parseInt(articleId, 10) : null,
+      sort, status
+    });
+    closeBannerModal();
+    loadBanners();
+  } catch (e) {}
+}
+
+async function delBanner(id) {
+  if (!confirm('确定删除该轮播？')) return;
+  try { await App.api.bannerDel(id); loadBanners(); } catch (e) {}
+}
+
+// 启动
+loadUsers();
+</script>
+</body>
+</html>

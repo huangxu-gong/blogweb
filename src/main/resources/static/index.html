@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>个人博客</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="with-sidebar" data-active="home">
+
+<script>
+// 根据 URL 参数设置侧边栏高亮
+if (new URLSearchParams(location.search).get('view') === 'all') {
+  document.body.setAttribute('data-active', 'all');
+}
+</script>
+
+<!-- Banner 轮播 -->
+<section id="carousel" class="carousel" style="display:none"></section>
+<div id="placeholder" class="home-placeholder-banner" style="display:none">记录代码，也记录生活</div>
+
+<!-- 搜索 -->
+<form class="search-bar" id="searchForm" onsubmit="doSearch(event)">
+  <input type="text" id="keyword" placeholder="搜索文章、标题或关键词..." autocomplete="off">
+  <button type="submit" class="btn">搜索</button>
+</form>
+
+<!-- 最新文章 -->
+<section class="home-section">
+  <div class="home-section-title">
+    <h2>最新文章</h2>
+    <a class="home-more" href="javascript:void(0)" onclick="toggleFullList()">查看全部 →</a>
+  </div>
+  <div class="article-grid" id="articleGrid"></div>
+</section>
+
+
+
+<!-- 分页（追加在最后） -->
+<div class="pager" id="pager" style="display:none;margin-left:234px;max-width:calc(100% - 258px)"></div>
+
+<script src="/js/common.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const state = { pageNum: 1, pageSize: 6, total: 0, keyword: '', fullList: params.get('view') === 'all' };
+
+// 全部文章模式隐藏轮播和占位横幅
+if (state.fullList) {
+  document.getElementById('carousel').style.display = 'none';
+  document.getElementById('placeholder').style.display = 'none';
+}
+
+// ---------- Banner 轮播 ----------
+async function loadBanner() {
+  if (state.fullList) return;
+  try {
+    const res = await App.api.bannerList();
+    const list = res.data || [];
+    if (!list.length) {
+      document.getElementById('placeholder').style.display = 'flex';
+      return;
+    }
+    const car = document.getElementById('carousel');
+    car.style.display = 'block';
+
+    const slides = list.map((b, i) => `
+      <a class="carousel-slide" href="${b.articleId ? '/detail.html?id=' + b.articleId : 'javascript:void(0)'}" style="${i===0?'':'opacity:0;position:absolute;inset:0;transform:translateX(100%)'}">
+        <img src="${b.imageUrl}" alt="" onerror="this.style.background='linear-gradient(135deg,#c5b8ff,#8cd8d0)';this.style.height='100%'">
+        <div class="carousel-caption">
+          <div style="font-size:26px;font-weight:700">${App.escapeHtml(b.title || '记录代码，也记录生活')}</div>
+          <div style="font-size:13px;margin-top:6px;opacity:.85">分享开发、技术、生活与思考</div>
+        </div>
+      </a>`).join('');
+
+    car.innerHTML = `
+      <div class="carousel-viewport" id="viewport">${slides}</div>
+      <button class="carousel-arrow prev" onclick="slide(-1)">‹</button>
+      <button class="carousel-arrow next" onclick="slide(1)">›</button>
+    `;
+    window._slides = document.querySelectorAll('#carousel .carousel-slide');
+    window._cur = 0;
+    if (window._slides.length > 1) window._timer = setInterval(() => slide(1), 5000);
+  } catch (e) {
+    document.getElementById('placeholder').style.display = 'flex';
+  }
+}
+function slide(dir) {
+  const n = window._slides.length; if (!n) return;
+  window._cur = (window._cur + dir + n) % n;
+  window._slides.forEach((s, i) => {
+    if (i === window._cur) { s.style.opacity = '1'; s.style.position = 'relative'; s.style.transform = 'none'; s.style.inset = ''; }
+    else { s.style.opacity = '0'; s.style.position = 'absolute'; s.style.transform = 'translateX(100%)'; s.style.inset = '0'; }
+  });
+}
+
+// ---------- 文章列表 ----------
+async function loadArticles() {
+  try {
+    // 首页只取 6 条，列表模式分页取 9 条
+    const pageSize = state.fullList ? 9 : 6;
+    const res = await App.api.articleList({ pageNum: state.pageNum, pageSize, keyword: state.keyword });
+    const data = res.data || {};
+    const list = data.records || data.list || [];
+    state.total = data.total || list.length;
+
+    const grid = document.getElementById('articleGrid');
+    if (!list.length) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">📝</div>暂无文章</div>`;
+      document.getElementById('pager').style.display = 'none';
+      return;
+    }
+    grid.innerHTML = list.map(a => {
+      const img = extractImg(a.content);
+      const tag = inferTag(a);
+      return `
+        <div class="article-card" onclick="gotoDetail(${a.id})">
+          ${img ? `<div class="card-thumb"><img src="${img}" alt="" onerror="this.style.background='linear-gradient(135deg,#eae3ff,#d4f1ef)';this.style.height='170px'"></div>` : ''}
+          <div class="card-body">
+            <span class="card-tag">${tag}</span>
+            <h3>${App.escapeHtml(a.title)}</h3>
+            <p>${App.escapeHtml(a.summary || (a.content || '').substring(0, 100))}</p>
+            <div class="card-meta">
+              <span>📅 ${App.formatDate(a.createTime)}</span>
+              <span>👁 ${a.viewCount || 0}</span>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+    renderPager();
+  } catch (e) {}
+}
+
+function extractImg(content) {
+  if (!content) return '';
+  const gm = content.match(/<!-- GAL:(\[.*?\]) -->/);
+  if (gm) {
+    try { const arr = JSON.parse(gm[1]); if (arr && arr.length) return arr[0]; } catch(e) {}
+  }
+  const md = content.match(/!\[[^\]]*\]\(([^)\s]+)/);
+  if (md) return md[1];
+  const m = content.match(/<img[^>]+src=["']([^"']+)["']/i);
+  if (m) return m[1];
+  return '';
+}
+
+function inferTag(a) {
+  const text = ((a.title || '') + ' ' + (a.summary || '') + ' ' + (a.content || '')).toLowerCase();
+  if (/spring|java|后端|开发|技术|教程|springboot|后端开发/.test(text)) return '技术';
+  if (/随笔|生活|日常|感悟|旅行|读书笔记/.test(text)) return '随笔';
+  if (/生活|旅行|美食|摄影/.test(text)) return '生活';
+  if (/前端|vue|react|html|css|javascript|typescript/.test(text)) return '前端';
+  if (/设计|ui|视觉/.test(text)) return '设计';
+  return a.status === 0 ? '草稿' : '生活';
+}
+
+function gotoDetail(id) { window.location.href = '/detail.html?id=' + id; }
+
+function renderPager() {
+  const totalPage = Math.max(1, Math.ceil(state.total / (state.fullList ? 9 : 6)));
+  const pager = document.getElementById('pager');
+  // 首页不显示分页，列表模式才显示
+  if (!state.fullList || totalPage <= 1) { pager.style.display = 'none'; return; }
+  pager.style.display = 'flex';
+  pager.innerHTML = `
+    <button class="btn" onclick="goPage(${state.pageNum - 1})" ${state.pageNum <= 1 ? 'disabled' : ''}>上一页</button>
+    <span>第 ${state.pageNum} / ${totalPage} 页</span>
+    <button class="btn" onclick="goPage(${state.pageNum + 1})" ${state.pageNum >= totalPage ? 'disabled' : ''}>下一页</button>`;
+}
+function goPage(n) { state.pageNum = n; loadArticles(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+function doSearch(e) {
+  e.preventDefault();
+  state.keyword = document.getElementById('keyword').value.trim();
+  state.pageNum = 1;
+  state.fullList = true; // 搜索自动进入列表模式
+  updateMoreLink();
+  loadArticles();
+}
+
+// "查看全部 / 返回首页" 切换
+function toggleFullList() {
+  location.href = '/index.html?view=all';
+}
+function updateMoreLink() {
+  const link = document.querySelector('.home-more');
+  if (!link) return;
+  if (state.fullList) { link.style.display = 'none'; return; }
+  link.style.display = '';
+  link.textContent = '查看全部 →';
+}
+
+loadBanner();
+updateMoreLink();
+loadArticles();
+</script>
+</body>
+</html>

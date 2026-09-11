@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>注册 - 个人博客</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body class="auth-page">
+<canvas id="field"></canvas>
+<div class="nav">
+  <div class="brand"><span class="dot"></span>个人博客</div>
+  <div>
+    <a href="/index.html">首页</a>
+    <a href="/login.html">登录</a>
+  </div>
+</div>
+
+<div class="auth-wrap">
+  <h1 class="auth-title">Personal Blog</h1>
+  <div class="auth-card">
+    <div class="error" id="errorMsg"></div>
+    <div class="form-item">
+      <label for="username">用户名</label>
+      <input id="username" type="text" placeholder="请输入用户名">
+    </div>
+    <div class="form-item">
+      <label for="password">密码</label>
+      <input id="password" type="password" placeholder="至少6位">
+    </div>
+    <div class="form-item">
+      <label for="confirmPassword">确认密码</label>
+      <input id="confirmPassword" type="password" placeholder="再次输入密码">
+    </div>
+    <div class="form-item">
+      <label for="nickname">昵称（可选）</label>
+      <input id="nickname" type="text" placeholder="不填则默认与用户名相同">
+    </div>
+    <div class="auth-actions">
+      <button class="auth-btn" onclick="register()">注册 <span class="arrow">▸</span></button>
+    </div>
+    <div class="tip">已有账号？<a href="/login.html">去登录</a></div>
+  </div>
+</div>
+
+<script>
+  async function register() {
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    const confirmPassword = document.getElementById('confirmPassword').value;
+    const nickname = document.getElementById('nickname').value.trim();
+    const errorMsg = document.getElementById('errorMsg');
+    errorMsg.innerText = '';
+
+    if (!username) {
+      errorMsg.innerText = '用户名不能为空';
+      return;
+    }
+    if (!password || password.length < 6) {
+      errorMsg.innerText = '密码长度不能少于6位';
+      return;
+    }
+    if (password !== confirmPassword) {
+      errorMsg.innerText = '两次输入的密码不一致';
+      return;
+    }
+
+    const body = { username, password };
+    if (nickname) {
+      body.nickname = nickname;
+    }
+
+    const res = await fetch('/api/user/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const result = await res.json();
+
+    if (result.code === 200) {
+      alert('注册成功，请登录');
+      window.location.href = '/login.html';
+    } else {
+      errorMsg.innerText = result.msg || '注册失败';
+    }
+  }
+</script>
+<script src="/js/field.js"></script>
+</body>
+</html>

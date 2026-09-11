@@ -1,0 +1,212 @@
+/* ============================================================
+   登录 / 注册页专用皮肤
+   仅 login.html 和 register.html 引入本文件，且所有选择器都挂在
+   body.auth-page 下，不会影响其它页面。
+   ============================================================ */
+
+.auth-page {
+  --auth-cyan: #35e8d5;
+  --auth-cyan-soft: rgba(53, 232, 213, .45);
+  --auth-cyan-dim: rgba(53, 232, 213, .22);
+  --auth-text: #cfeee9;
+
+  min-height: 100vh;
+  color: var(--auth-text);
+  /* 覆盖 style.css 里 body 的全站背景图，换成参考图的深青渐变 + 斜向光带 */
+  background-color: #04222c;
+  background-image:
+    radial-gradient(120% 95% at 76% 16%, rgba(28, 224, 198, .30), transparent 56%),
+    radial-gradient(110% 85% at 10% 92%, rgba(0, 8, 18, .62), transparent 62%),
+    linear-gradient(122deg, #03202a 0%, #06454e 32%, #109387 54%, #0a5f63 72%, #04202a 100%);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: cover;
+  background-attachment: fixed;
+}
+
+/* ---------- 顶部导航（参考图没有导航，这里保留并改成深色以配合暗底） ---------- */
+.auth-page .nav {
+  background: rgba(3, 30, 38, .55);
+  border-bottom: 1px solid rgba(53, 232, 213, .16);
+  box-shadow: none;
+}
+
+.auth-page .nav .brand {
+  color: #d9fbf5;
+}
+
+.auth-page .nav a {
+  color: rgba(207, 238, 233, .8);
+}
+
+.auth-page .nav a:hover {
+  color: var(--auth-cyan);
+  border-color: var(--auth-cyan-dim);
+  background: rgba(53, 232, 213, .08);
+}
+
+/* ---------- 布局 ---------- */
+.auth-page .auth-wrap {
+  position: relative;
+  z-index: 2;
+  width: min(560px, 92vw);
+  margin: clamp(36px, 11vh, 110px) auto 64px;
+}
+
+/* 参考图里标题在卡片上方、且相对卡片左边缘往右缩进一段 */
+.auth-page .auth-title {
+  margin: 0 0 26px 34px;
+  font-family: var(--font-grotesk);
+  font-size: clamp(32px, 5.2vw, 46px);
+  font-weight: 300;
+  letter-spacing: .01em;
+  color: var(--auth-cyan);
+  text-shadow: 0 0 26px rgba(53, 232, 213, .35);
+}
+
+/* ---------- 双层描边卡片 ---------- */
+.auth-page .auth-card {
+  position: relative;
+  padding: 42px 54px 38px;
+  border: 1px solid var(--auth-cyan-soft);
+  border-radius: 16px;
+  background: rgba(4, 48, 56, .42);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: rise .7s cubic-bezier(.2, .8, .2, 1) both;
+}
+
+/* 参考图里错开半张、露出左上角的第二层描边。
+   z-index:-1 让它画在卡片底色之下，只从左上角露出来 */
+.auth-page .auth-card::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: -16px;
+  top: -18px;
+  right: 16px;
+  bottom: 18px;
+  border: 1px solid var(--auth-cyan-dim);
+  border-radius: 16px;
+  pointer-events: none;
+}
+
+/* ---------- 表单 ---------- */
+.auth-page .form-item {
+  margin-bottom: 22px;
+}
+
+.auth-page .form-item label {
+  margin-bottom: 10px;
+  font-family: var(--font-grotesk);
+  font-size: 19px;
+  font-weight: 300;
+  letter-spacing: .01em;
+  color: var(--auth-cyan);
+}
+
+.auth-page .form-item input {
+  padding: 13px 16px;
+  background: rgba(2, 34, 42, .42);
+  border: 1px solid var(--auth-cyan-soft);
+  border-radius: 8px;
+  color: #e8fffb;
+  font-size: 15px;
+}
+
+.auth-page .form-item input:focus {
+  border-color: var(--auth-cyan);
+  background: rgba(2, 34, 42, .62);
+  box-shadow: 0 0 0 3px rgba(53, 232, 213, .14);
+}
+
+.auth-page ::placeholder {
+  color: rgba(207, 238, 233, .42);
+  opacity: 1;
+}
+
+/* Chrome 自动填充会强行刷成白底黑字，这里压回深色 */
+.auth-page .form-item input:-webkit-autofill,
+.auth-page .form-item input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #e8fffb;
+  -webkit-box-shadow: 0 0 0 1000px #063a44 inset;
+  caret-color: #e8fffb;
+}
+
+/* ---------- 按钮（参考图里靠右的描边按钮） ---------- */
+.auth-page .auth-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 30px;
+}
+
+.auth-page .auth-btn {
+  border: 1px solid var(--auth-cyan-soft);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--auth-cyan);
+  font-family: var(--font-grotesk);
+  font-size: 19px;
+  font-weight: 300;
+  letter-spacing: .02em;
+  padding: 12px 30px;
+  cursor: pointer;
+  transition: background .25s, border-color .25s, box-shadow .25s;
+}
+
+.auth-page .auth-btn:hover {
+  background: rgba(53, 232, 213, .1);
+  border-color: var(--auth-cyan);
+  box-shadow: 0 0 24px -6px rgba(53, 232, 213, .5);
+}
+
+.auth-page .auth-btn .arrow {
+  font-size: 14px;
+  vertical-align: 1px;
+}
+
+/* ---------- 提示与错误 ---------- */
+.auth-page .tip {
+  margin-top: 22px;
+  text-align: center;
+  color: rgba(207, 238, 233, .6);
+}
+
+.auth-page .tip a {
+  color: var(--auth-cyan);
+}
+
+.auth-page .tip a:hover {
+  color: #eafffb;
+}
+
+.auth-page .error {
+  color: #ff7a9c;
+  margin-bottom: 14px;
+}
+
+/* ---------- 窄屏 ---------- */
+@media (max-width: 560px) {
+  .auth-page .auth-title {
+    margin-left: 14px;
+  }
+
+  .auth-page .auth-card {
+    padding: 32px 24px 28px;
+  }
+
+  .auth-page .auth-card::before {
+    left: -10px;
+    top: -12px;
+    right: 10px;
+    bottom: 12px;
+  }
+
+  .auth-page .auth-actions {
+    justify-content: stretch;
+  }
+
+  .auth-page .auth-btn {
+    width: 100%;
+  }
+}

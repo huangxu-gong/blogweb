@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>关于我 - 个人博客</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="with-sidebar" data-active="profile">
+
+<div class="write-box" style="max-width:600px">
+  <a href="javascript:history.back()" class="link" style="margin-bottom:14px">← 返回</a>
+
+  <div class="profile-card">
+    <div class="profile-avatar" id="profileAvatar" onclick="pickAvatar()" title="点击更换头像">
+      <div class="profile-avatar-hint">📷</div>
+    </div>
+    <input type="file" id="avatarInput" accept="image/*" style="display:none">
+    <div class="profile-name" id="profileName">加载中...</div>
+    <div class="profile-role" id="profileRole"></div>
+  </div>
+
+  <div class="profile-list">
+    <div class="profile-item">
+      <div class="profile-item-label">用户ID</div>
+      <div class="profile-item-value" id="profileId">-</div>
+    </div>
+    <div class="profile-item profile-item-edit">
+      <div class="profile-item-label">昵称</div>
+      <div class="profile-item-edit-wrap">
+        <input type="text" id="editNickname" class="profile-input" placeholder="请输入昵称">
+      </div>
+    </div>
+    <div class="profile-item">
+      <div class="profile-item-label">登录账号</div>
+      <div class="profile-item-value" id="profileUsername">-</div>
+    </div>
+    <div class="profile-item profile-item-edit">
+      <div class="profile-item-label">邮箱</div>
+      <div class="profile-item-edit-wrap">
+        <input type="email" id="editEmail" class="profile-input" placeholder="请输入邮箱">
+      </div>
+    </div>
+    <div class="profile-item">
+      <div class="profile-item-label">注册时间</div>
+      <div class="profile-item-value" id="profileCreateTime">-</div>
+    </div>
+    <div class="profile-item">
+      <div class="profile-item-label">角色</div>
+      <div class="profile-item-value" id="profileRole2">-</div>
+    </div>
+  </div>
+
+  <div class="profile-actions">
+    <button class="btn" onclick="saveProfile()" id="saveBtn">保存修改</button>
+    <span class="tip" id="saveTip"></span>
+  </div>
+</div>
+
+<script src="/js/common.js"></script>
+<script>
+if (!App.store.isLogin) {
+  alert('请先登录');
+  location.href = '/login.html';
+} else {
+  let currentUser = null;
+
+  async function loadProfile() {
+    try {
+      const res = await App.api.userInfo();
+      const u = res.data;
+      if (!u) return;
+      currentUser = u;
+
+      const initial = (u.nickname || u.username || '?').charAt(0).toUpperCase();
+      const avatar = document.getElementById('profileAvatar');
+      const hint = avatar.querySelector('.profile-avatar-hint');
+      if (u.avatar) {
+        avatar.style.backgroundImage = `url('${u.avatar}')`;
+        avatar.style.backgroundSize = 'cover';
+        avatar.textContent = '';
+        avatar.appendChild(hint);
+        hint.style.display = 'none';
+      } else {
+        avatar.textContent = initial;
+        avatar.appendChild(hint);
+      }
+      document.getElementById('profileName').textContent = u.nickname || u.username;
+      document.getElementById('profileRole').textContent = u.role === 1 ? '管理员' : '普通用户';
+      document.getElementById('profileId').textContent = u.id || '-';
+      document.getElementById('profileUsername').textContent = u.username || '-';
+      document.getElementById('profileCreateTime').textContent = u.createTime ? u.createTime.substring(0, 10) : '-';
+      document.getElementById('profileRole2').textContent = u.role === 1 ? '管理员' : '普通用户';
+      // 填入可编辑字段
+      document.getElementById('editNickname').value = u.nickname || '';
+      document.getElementById('editEmail').value = u.email || '';
+    } catch (e) {
+      // 接口失败回退
+      const initial = (App.store.nickname || '?').charAt(0).toUpperCase();
+      document.getElementById('profileAvatar').textContent = initial;
+      document.getElementById('profileName').textContent = App.store.nickname || '-';
+      document.getElementById('profileRole').textContent = App.store.isAdmin ? '管理员' : '普通用户';
+      document.getElementById('profileId').textContent = App.store.userId || '-';
+      document.getElementById('profileUsername').textContent = localStorage.getItem('username') || '-';
+      document.getElementById('profileRole2').textContent = App.store.isAdmin ? '管理员' : '普通用户';
+      document.getElementById('editNickname').value = App.store.nickname || '';
+      document.getElementById('editEmail').value = localStorage.getItem('email') || '';
+    }
+  }
+
+  async function saveProfile() {
+    const nickname = document.getElementById('editNickname').value.trim();
+    const email = document.getElementById('editEmail').value.trim();
+    const tip = document.getElementById('saveTip');
+    const btn = document.getElementById('saveBtn');
+
+    if (!nickname) { tip.textContent = '昵称不能为空'; tip.style.color = '#ef4444'; return; }
+
+    btn.disabled = true;
+    tip.textContent = '保存中...';
+    tip.style.color = '#9ca3af';
+    try {
+      const res = await App.api.userUpdate({ nickname, email });
+      // 更新 localStorage
+      App.store.setUser(res.data || { nickname, email });
+      // 更新页面显示
+      document.getElementById('profileName').textContent = (res.data && res.data.nickname) || nickname;
+      tip.textContent = '✓ 保存成功';
+      tip.style.color = '#10b981';
+      setTimeout(() => { tip.textContent = ''; }, 2000);
+    } catch (e) {
+      tip.textContent = '保存失败：' + (e.msg || '未知错误');
+      tip.style.color = '#ef4444';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ---------- 头像上传 ----------
+  function pickAvatar() { document.getElementById('avatarInput').click(); }
+  document.getElementById('avatarInput').addEventListener('change', async function () {
+    const file = this.files[0]; if (!file) return;
+    const tip = document.getElementById('saveTip');
+    const avatar = document.getElementById('profileAvatar');
+    avatar.style.opacity = '0.5';
+    tip.textContent = '头像上传中...'; tip.style.color = '#9ca3af';
+    try {
+      const upRes = await App.api.upload(file);
+      if (upRes.code !== 200) throw upRes;
+      const avatarUrl = upRes.data;
+      const res = await App.api.userUpdate({ avatar: avatarUrl });
+      App.store.setUser(res.data || { avatar: avatarUrl });
+      // 更新头像显示
+      avatar.style.backgroundImage = `url('${avatarUrl}')`;
+      avatar.style.backgroundSize = 'cover';
+      avatar.style.opacity = '1';
+      avatar.querySelector('.profile-avatar-hint').style.display = 'none';
+      tip.textContent = '✓ 头像更换成功';
+      tip.style.color = '#10b981';
+      setTimeout(() => { tip.textContent = ''; }, 2000);
+    } catch (e) {
+      avatar.style.opacity = '1';
+      tip.textContent = '头像上传失败';
+      tip.style.color = '#ef4444';
+    }
+    this.value = '';
+  });
+
+  loadProfile();
+
+  // 暴露到全局供 onclick 调用
+  window.saveProfile = saveProfile;
+  window.pickAvatar = pickAvatar;
+}
+</script>
+</body>
+</html>
