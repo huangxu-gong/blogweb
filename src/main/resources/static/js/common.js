@@ -213,6 +213,33 @@
     `;
     body.insertBefore(sidebar, body.firstChild);
 
+    // ---- 移动端：汉堡按钮 + 遮罩层（点击抽屉外自动关闭） ----
+    const ham = document.createElement('button');
+    ham.className = 'sb-hamburger';
+    ham.setAttribute('aria-label', '菜单');
+    ham.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>';
+    ham.addEventListener('click', function () {
+      const open = sidebar.classList.toggle('open');
+      mask.classList.toggle('show', open);
+    });
+    body.insertBefore(ham, body.firstChild);
+
+    const mask = document.createElement('div');
+    mask.className = 'sb-mask';
+    mask.addEventListener('click', function () {
+      sidebar.classList.remove('open');
+      mask.classList.remove('show');
+    });
+    body.insertBefore(mask, body.firstChild);
+
+    // 侧边栏内点击导航后自动收起抽屉
+    sidebar.addEventListener('click', function (e) {
+      if (e.target.closest('a')) {
+        sidebar.classList.remove('open');
+        mask.classList.remove('show');
+      }
+    });
+
     window.logout = function () {
       if (!confirm('确定退出登录？')) return;
       store.clear();

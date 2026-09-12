@@ -2104,6 +2104,160 @@ body.with-sidebar::after { display: none; }
 }
 
 /* ============================================================
+   手机端自适应（≤760px）：汉堡菜单 + 单列布局 + 表格横滚
+   ============================================================ */
+
+/* 汉堡按钮（仅手机端显示） */
+.sb-hamburger {
+  display: none;
+  position: fixed;
+  top: 14px; left: 14px;
+  z-index: 70;
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  border: 1px solid #eef0f5;
+  background: #fff;
+  color: #1d1e36;
+  box-shadow: 0 4px 14px -6px rgba(0,0,0,.15);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.sb-hamburger:active { background: #f5f6fa; }
+
+/* 遮罩层 */
+.sb-mask {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: rgba(15, 18, 40, .45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+.sb-mask.show { display: block; }
+
+@media (max-width: 760px) {
+  /* 显示汉堡按钮 */
+  .sb-hamburger { display: flex; }
+
+  /* 侧边栏改为抽屉，宽度收窄 */
+  #sidebar-left {
+    width: 264px;
+    transform: translateX(-100%);
+    transition: transform .28s ease;
+    box-shadow: 8px 0 40px -12px rgba(0,0,0,.18);
+    padding-top: 64px;
+  }
+  #sidebar-left.open { transform: translateX(0); }
+
+  /* 通用内容留白：为汉堡按钮避位 */
+  .with-sidebar .page,
+  .with-sidebar .main-container {
+    padding-top: 72px;
+  }
+
+  /* 首页各区块改为全宽，去掉桌面左侧留白 */
+  .with-sidebar .carousel,
+  .with-sidebar .search-bar,
+  .home-section,
+  .home-placeholder-banner,
+  .with-sidebar .home-placeholder-banner,
+  .with-sidebar .article-detail,
+  .with-sidebar .write-box,
+  .with-sidebar .comment-card {
+    margin-left: 14px !important;
+    margin-right: 14px !important;
+    max-width: calc(100% - 28px) !important;
+  }
+  #pager {
+    margin-left: 14px !important;
+    max-width: calc(100% - 28px) !important;
+  }
+
+  /* 轮播高度压缩 */
+  .with-sidebar .carousel { height: 180px; margin-top: 14px !important; }
+  .with-sidebar .carousel-caption { padding: 46px 16px 12px; }
+  .with-sidebar .carousel-caption div:first-child { font-size: 17px !important; }
+  .with-sidebar .carousel-caption div:last-child { font-size: 11px !important; }
+  .with-sidebar .home-placeholder-banner { height: 180px; font-size: 18px; }
+  .carousel-arrow { width: 30px; height: 30px; font-size: 16px; }
+  .carousel-arrow.prev { left: 8px; }
+  .carousel-arrow.next { right: 8px; }
+
+  /* 搜索栏 */
+  .with-sidebar .search-bar { margin-top: 14px !important; padding: 6px 6px 6px 14px; }
+  .with-sidebar .search-bar input { font-size: 13px; }
+  .with-sidebar .search-bar .btn { padding: 8px 18px; font-size: 12px; }
+
+  /* 区块标题 */
+  .home-section { margin-top: 20px !important; }
+  .home-section-title h2 { font-size: 15px; }
+  .home-section-title .home-more { font-size: 12px; }
+
+  /* 文章卡片：缩略图高度降为 150，正文区压缩 */
+  .article-grid { gap: 14px; }
+  .article-grid .card-thumb img { height: 150px; }
+  .article-grid .card-body { padding: 12px 14px 14px; }
+  .article-grid h3 { font-size: 14.5px; }
+  .article-grid p { font-size: 12.5px; }
+
+  /* 写文章页 */
+  .write-box { padding: 20px 16px; }
+  .write-box h2 { font-size: 20px; }
+  #title { font-size: 16px; }  /* 防止 iOS 聚焦自动放大 */
+  textarea { min-height: 180px; font-size: 15px; }
+  .editor-toolbar { flex-wrap: wrap; gap: 8px; }
+  .gallery-grid { grid-template-columns: repeat(auto-fill, 72px); gap: 8px; }
+  .gallery-thumb { width: 72px; height: 72px; }
+
+  /* 详情页 */
+  .article-detail { padding: 22px 18px; }
+  .article-detail h1 { font-size: 21px; }
+  .article-content { font-size: 14.5px; line-height: 1.9; }
+  .comment-card { padding: 20px 16px; }
+
+  /* 我的文章操作按钮换行 */
+  .actions { flex-wrap: wrap; }
+
+  /* 管理后台：容器留白 + 表格横向滚动 */
+  .admin-body {
+    margin-left: 0 !important;
+    padding: 72px 14px 48px;
+  }
+  .admin-body h2 { font-size: 18px; padding-left: 52px; }
+  .admin-tabs { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; padding: 4px; }
+  .admin-tabs .admin-tab { flex: none; padding: 7px 14px; font-size: 12px; white-space: nowrap; }
+  .admin-toolbar { flex-direction: column; align-items: stretch; }
+  .art-search { max-width: 100% !important; }
+  .admin-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: 14px; }
+  .admin-table { min-width: 640px; }
+  .admin-table th, .admin-table td { padding: 10px 12px; font-size: 12px; }
+  .admin-modal { width: min(500px, 94vw); padding: 20px 18px; }
+
+  /* 个人资料页 */
+  .profile-input { width: 150px; }
+  .profile-actions { flex-wrap: wrap; }
+
+  /* Lightbox：箭头缩小、贴近屏幕边 */
+  .lightbox-nav { width: 38px; height: 38px; font-size: 22px; }
+  .lightbox-prev { left: 8px; }
+  .lightbox-next { right: 8px; }
+  .lightbox img#lightboxImg { max-width: 94vw; max-height: 80vh; }
+
+  /* 分页按钮 */
+  .pager .btn { padding: 8px 14px; font-size: 13px; }
+  .pager span { font-size: 12px; }
+}
+
+/* 超小屏（≤400px）：文章网格已单列，进一步压缩 */
+@media (max-width: 400px) {
+  .article-grid .card-thumb img { height: 130px; }
+  .with-sidebar .carousel { height: 150px; }
+}
+
+/* ============================================================
    首页 Banner + 文章卡片 + 我的作品
    ============================================================ */
 
